@@ -1,17 +1,22 @@
+from multiprocessing.util import sub_debug
+from re import sub
+import subprocess
 import time
 import paramiko
 
 
-class Connection:
+class SSHClient:
 
     __ssh_client = None
     __addr = None
     __username = None
     __password = None
     __port = None
+    __modbus_port = None
 
     def __init__(self, auth, parser):
         try:
+            auth = auth['auth_params']
             if parser.ip:
                 self.__addr = parser.ip
             else:
@@ -28,11 +33,15 @@ class Connection:
                 self.__port = parser.sp
             else:
                 self.__port = auth['port']
+            if parser.p:
+                self.__port = parser.p
+            else:
+                self.__modbus_port = auth['modbus_port']
         except:
-            print('SSH login credentials are invalid')
+            print('Authorization login credentials are invalid')
             exit()
         if not self.__open_connection():
-            print('Unable to connect to SSH server')
+            print('Unable to establish a connection to the server')
             exit()
 
     def close_connection(self):
@@ -45,37 +54,26 @@ class Connection:
         try:
             client.connect(self.__addr, self.__port,
                            self.__username, self.__password, timeout=10)
-            self.__ssh_client = client.invoke_shell()
-            time.sleep(1)
-            self.__ssh_client.send(
-                'socat /dev/tty,raw,echo=0,escape=0x03 /dev/ttyUSB3,raw,setsid,sane,echo=0,nonblock ; stty sane\r')
-            time.sleep(1)
-            clear = self.__ssh_client.recv(-1)
+            self.__ssh_client = client
             time.sleep(1)
             return True
         except:
             return None
 
-    def exec(self, command, result):
-        acceptable_results = [
-            'OK', 'ERROR', 'NO CARRIER'
-        ]
+    def exec(self, reg_address, reg_amount, ssh_cmd):
         try:
-            self.__ssh_client.send(str(command) + '\r')
-            time.sleep(1)
-            if result:
-                time_limit = time.time()+180
-                while time.time() < time_limit:
-                    res = self.__ssh_client.recv(
-                        -1).decode('utf-8').split('\n\n')
-                    try:
-                        msg = str(res[-1]).replace('\n', '')
-                    except:
-                        pass
-                    if msg in acceptable_results:
-                        return msg
-                    time.sleep(5)
-                return 'ERROR'
+            if reg_address < 10:
+                reg_address = '00{}'.format(reg_address)
+            elif reg_address > 10 and reg_address < 100:
+                reg_address = '0{}'.format(reg_address)
+
+            modbus_msg = 'modbus read -D -w -p {} {} %MW{} {}'.format(
+                self.__modbus_port, self.__addr, reg_address, reg_amount)
+            modbus_result = subprocess.check_output(modbus_msg, shell=True)
+            stdin, stdout, stderr = self.__ssh_client.exec_command(ssh_cmd)
+            ssh_res = stdout.readlines()
+            return modbus_result, ssh_res
+
         except Exception as error:
             print(error)
             exit()

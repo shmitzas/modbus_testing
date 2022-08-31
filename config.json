@@ -1,7 +1,7 @@
 {
     "RUTX11": {
-        "auth": "ssh",
         "auth_params": {
+            "modbus_port": 502,
             "username": "root",
             "password": "Admin123",
             "address": "192.168.1.1",
@@ -9,12 +9,10 @@
         },
         "commands": [
             {
-                "command": "ATE1",
-                "expects": "OK"
-            },
-            {
-                "command": "AT+CMGF=1",
-                "expects": "OK"
+                "reg_address": 5,
+                "reg_amount": 2,
+                "representation" : "32 bit integer",
+                "ssh_command": "gsmctl -c"
             }
         ]
     }
